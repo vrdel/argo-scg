@@ -5,8 +5,7 @@ import subprocess
 
 import requests
 from argo_scg.exceptions import SensuException, SCGException, SCGWarnException
-from argo_scg.generator import create_attribute_env, create_label, \
-    is_attribute_secret
+from argo_scg.generator import create_attribute_env, create_label, is_attribute_secret
 
 
 class Sensu:
@@ -21,15 +20,11 @@ class Sensu:
         exceptions = ["sensu-system"]
         response = requests.get(
             f"{self.url}/api/core/v2/namespaces",
-            headers={
-                "Authorization": f"Key {self.token}",
-                "Content-Type": "application/json"
-            }
+            headers={"Authorization": f"Key {self.token}", "Content-Type": "application/json"},
         )
 
         if not response.ok:
-            msg = f"Namespaces fetch error: " \
-                  f"{response.status_code} {response.reason}"
+            msg = f"Namespaces fetch error: {response.status_code} {response.reason}"
 
             try:
                 msg = f"{msg}: {response.json()['message']}"
@@ -43,8 +38,9 @@ class Sensu:
 
         else:
             return [
-                namespace["name"] for namespace in response.json() if
-                namespace["name"] not in exceptions
+                namespace["name"]
+                for namespace in response.json()
+                if namespace["name"] not in exceptions
             ]
 
     def handle_namespaces(self):
@@ -56,14 +52,16 @@ class Sensu:
                     f"{self.url}/api/core/v2/namespaces/{namespace}",
                     headers={
                         "Authorization": f"Key {self.token}",
-                        "Content-Type": "application/json"
+                        "Content-Type": "application/json",
                     },
-                    data=json.dumps({"name": namespace})
+                    data=json.dumps({"name": namespace}),
                 )
 
                 if not response.ok:
-                    msg = f"Namespace {namespace} create error: " \
-                          f"{response.status_code} {response.reason}"
+                    msg = (
+                        f"Namespace {namespace} create error: "
+                        f"{response.status_code} {response.reason}"
+                    )
 
                     try:
                         msg = f"{msg}: {response.json()['message']}"
@@ -78,19 +76,18 @@ class Sensu:
                 else:
                     self.logger.info(f"Namespace {namespace} created")
 
-        for namespace in set(existing_namespaces).difference(
-                set(self.namespaces.keys())
-        ):
+        for namespace in set(existing_namespaces).difference(set(self.namespaces.keys())):
             try:
                 subprocess.check_output(
                     f"sensuctl dump "
                     f"entities,events,assets,checks,filters,handlers,silenced "
-                    f"--namespace {namespace} | sensuctl delete", shell=True
+                    f"--namespace {namespace} | sensuctl delete",
+                    shell=True,
                 )
                 self.logger.info(f"Namespace {namespace} emptied")
                 response = requests.delete(
                     f"{self.url}/api/core/v2/namespaces/{namespace}",
-                    headers={"Authorization": f"Key {self.token}"}
+                    headers={"Authorization": f"Key {self.token}"},
                 )
 
                 if response.ok:
@@ -107,22 +104,16 @@ class Sensu:
                     self.logger.error(f"Error deleting {namespace}: {msg}")
 
             except subprocess.CalledProcessError as err:
-                self.logger.error(
-                    f"Error cleaning namespace {namespace}: {err.output}"
-                )
+                self.logger.error(f"Error cleaning namespace {namespace}: {err.output}")
 
     def _get_checks(self, namespace):
         response = requests.get(
             f"{self.url}/api/core/v2/namespaces/{namespace}/checks",
-            headers={
-                "Authorization": f"Key {self.token}",
-                "Content-Type": "application/json"
-            }
+            headers={"Authorization": f"Key {self.token}", "Content-Type": "application/json"},
         )
 
         if not response.ok:
-            msg = f"{namespace}: Checks fetch error: " \
-                  f"{response.status_code} {response.reason}"
+            msg = f"{namespace}: Checks fetch error: {response.status_code} {response.reason}"
 
             try:
                 msg = f"{msg}: {response.json()['message']}"
@@ -139,10 +130,7 @@ class Sensu:
     def _get_events(self, namespace):
         response = requests.get(
             f"{self.url}/api/core/v2/namespaces/{namespace}/events",
-            headers={
-                "Authorization": f"Key {self.token}",
-                "Content-Type": "application/json"
-            }
+            headers={"Authorization": f"Key {self.token}", "Content-Type": "application/json"},
         )
         return response
 
@@ -150,8 +138,7 @@ class Sensu:
         response = self._get_events(namespace=namespace)
 
         if not response.ok:
-            msg = f"{namespace}: Events fetch error: " \
-                  f"{response.status_code} {response.reason}"
+            msg = f"{namespace}: Events fetch error: {response.status_code} {response.reason}"
 
             try:
                 msg = f"{msg}: {response.json()['message']}"
@@ -164,16 +151,14 @@ class Sensu:
         else:
             try:
                 return [
-                    event for event in response.json() if
-                    event["entity"]["metadata"]["name"] == entity and
-                    event["check"]["metadata"]["name"] == check
+                    event
+                    for event in response.json()
+                    if event["entity"]["metadata"]["name"] == entity
+                    and event["check"]["metadata"]["name"] == check
                 ][0]
 
             except IndexError:
-                raise SensuException(
-                    f"{namespace}: No event for entity {entity} and check "
-                    f"{check}"
-                )
+                raise SensuException(f"{namespace}: No event for entity {entity} and check {check}")
 
     def get_event_output(self, entity, check, namespace="default"):
         event = self._get_event(entity=entity, check=check, namespace=namespace)
@@ -183,8 +168,7 @@ class Sensu:
         response = self._get_events(namespace=namespace)
 
         if not response.ok:
-            msg = f"{namespace}: Events fetch error: " \
-                  f"{response.status_code} {response.reason}"
+            msg = f"{namespace}: Events fetch error: {response.status_code} {response.reason}"
 
             try:
                 msg = f"{msg}: {response.json()['message']}"
@@ -201,12 +185,13 @@ class Sensu:
     def _delete_check(self, check, namespace):
         response = requests.delete(
             f"{self.url}/api/core/v2/namespaces/{namespace}/checks/{check}",
-            headers={"Authorization": f"Key {self.token}"}
+            headers={"Authorization": f"Key {self.token}"},
         )
 
         if not response.ok:
-            msg = f"{namespace}: Check {check} not removed: " \
-                  f"{response.status_code} {response.reason}"
+            msg = (
+                f"{namespace}: Check {check} not removed: {response.status_code} {response.reason}"
+            )
 
             try:
                 msg = f"{msg}: {response.json()['message']}"
@@ -247,16 +232,15 @@ class Sensu:
 
     def _delete_event(self, entity, check, namespace):
         response = requests.delete(
-            f"{self.url}/api/core/v2/namespaces/{namespace}/events/"
-            f"{entity}/{check}",
-            headers={
-                "Authorization": f"Key {self.token}"
-            }
+            f"{self.url}/api/core/v2/namespaces/{namespace}/events/{entity}/{check}",
+            headers={"Authorization": f"Key {self.token}"},
         )
 
         if not response.ok:
-            msg = f"{namespace}: Event {entity}/{check} not removed: " \
-                  f"{response.status_code} {response.reason}"
+            msg = (
+                f"{namespace}: Event {entity}/{check} not removed: "
+                f"{response.status_code} {response.reason}"
+            )
 
             try:
                 msg = f"{msg}: {response.json()['message']}"
@@ -267,9 +251,7 @@ class Sensu:
             raise SCGException(msg)
 
         else:
-            self._delete_silenced_entry(
-                entity=entity, check=check, namespace=namespace
-            )
+            self._delete_silenced_entry(entity=entity, check=check, namespace=namespace)
 
     def delete_event(self, entity, check, namespace="default"):
         try:
@@ -285,24 +267,17 @@ class Sensu:
         for entity, checks in events.items():
             for check in checks:
                 try:
-                    self._delete_event(
-                        entity=entity, check=check, namespace=namespace
-                    )
+                    self._delete_event(entity=entity, check=check, namespace=namespace)
 
                 except SCGWarnException as e:
-                    self.logger.info(
-                        f"{namespace}: Event {entity}/{check} removed"
-                    )
+                    self.logger.info(f"{namespace}: Event {entity}/{check} removed")
                     self.logger.warning(f"{namespace}: {str(e)}")
-
 
                 except SCGException as e:
                     self.logger.warning(str(e))
 
                 else:
-                    self.logger.info(
-                        f"{namespace}: Event {entity}/{check} removed"
-                    )
+                    self.logger.info(f"{namespace}: Event {entity}/{check} removed")
 
     @staticmethod
     def _compare_checks(check1, check2):
@@ -335,8 +310,7 @@ class Sensu:
             if condition2 and condition3:
                 condition5 = c1[key2] == c2[key2]
 
-            if (condition1 and condition5) or (condition3 and condition5) or \
-                    condition4:
+            if (condition1 and condition5) or (condition3 and condition5) or condition4:
                 interval_equal = True
 
             return interval_equal
@@ -364,21 +338,20 @@ class Sensu:
             return _equality_2lvl(c1, c2, key="labels")
 
         equal = False
-        if ((check1["command"] == check2["command"] and
-                sorted(check1["subscriptions"]) ==
-                sorted(check2["subscriptions"]) and
-                sorted(check1["handlers"]) == sorted(check2["handlers"]) and
-                proxy_equality(check1, check2) and
-                interval_equality(check1, check2) and
-                check1["timeout"] == check2["timeout"] and
-                check1["publish"] == check2["publish"] and
-                check1["metadata"]["name"] == check2["metadata"]["name"] and
-                check1["metadata"]["namespace"] ==
-                check2["metadata"]["namespace"] and
-                check1["round_robin"] == check2["round_robin"] and
-                check1["pipelines"] == check2["pipelines"] and
-                annotations_equality(check1, check2)) and
-                labels_equality(check1, check2)):
+        if (
+            check1["command"] == check2["command"]
+            and sorted(check1["subscriptions"]) == sorted(check2["subscriptions"])
+            and sorted(check1["handlers"]) == sorted(check2["handlers"])
+            and proxy_equality(check1, check2)
+            and interval_equality(check1, check2)
+            and check1["timeout"] == check2["timeout"]
+            and check1["publish"] == check2["publish"]
+            and check1["metadata"]["name"] == check2["metadata"]["name"]
+            and check1["metadata"]["namespace"] == check2["metadata"]["namespace"]
+            and check1["round_robin"] == check2["round_robin"]
+            and check1["pipelines"] == check2["pipelines"]
+            and annotations_equality(check1, check2)
+        ) and labels_equality(check1, check2):
             equal = True
 
         return equal
@@ -388,8 +361,8 @@ class Sensu:
             f"{self.url}/api/core/v2/namespaces/{namespace}/entities",
             headers={
                 "Authorization": "Key {}".format(self.token),
-                "Content-Type": "application/json"
-            }
+                "Content-Type": "application/json",
+            },
         )
 
         if not response.ok:
@@ -411,46 +384,38 @@ class Sensu:
             data = self._get_entities(namespace=namespace)
 
         except SensuException as e:
-            msg = f"{namespace}: Error fetching proxy entities: " \
-                  f"{str(e).strip('Sensu error: ')}"
+            msg = f"{namespace}: Error fetching proxy entities: {str(e).strip('Sensu error: ')}"
             self.logger.error(msg)
             raise SensuException(msg)
 
-        return [
-            entity for entity in data if entity["entity_class"] == "proxy"
-        ]
+        return [entity for entity in data if entity["entity_class"] == "proxy"]
 
     def _get_agents(self, namespace):
         try:
             data = self._get_entities(namespace=namespace)
 
         except SensuException as e:
-            msg = f"{namespace}: Error fetching agents: " \
-                  f"{str(e).strip('Sensu error: ')}"
+            msg = f"{namespace}: Error fetching agents: {str(e).strip('Sensu error: ')}"
             self.logger.error(msg)
             raise SensuException(msg)
 
-        return [
-            entity for entity in data if entity["entity_class"] == "agent"
-        ]
+        return [entity for entity in data if entity["entity_class"] == "agent"]
 
     def get_agents(self, namespace="default"):
         try:
             data = self._get_entities(namespace=namespace)
 
         except SensuException as e:
-            msg = f"{namespace}: Error fetching agents: " \
-                  f"{str(e).strip('Sensu error: ')}"
+            msg = f"{namespace}: Error fetching agents: {str(e).strip('Sensu error: ')}"
             raise SensuException(msg)
 
-        return [
-            entity for entity in data if entity["entity_class"] == "agent"
-        ]
+        return [entity for entity in data if entity["entity_class"] == "agent"]
 
     def is_entity_agent(self, entity, namespace="default"):
         try:
             entity_configuration = [
-                e for e in self._get_entities(namespace=namespace)
+                e
+                for e in self._get_entities(namespace=namespace)
                 if e["metadata"]["name"] == entity
             ][0]
 
@@ -466,14 +431,15 @@ class Sensu:
     def _delete_entities(self, entities, namespace):
         for entity in entities:
             response = requests.delete(
-                f"{self.url}/api/core/v2/namespaces/{namespace}"
-                f"/entities/{entity}",
-                headers={"Authorization": f"Key {self.token}"}
+                f"{self.url}/api/core/v2/namespaces/{namespace}/entities/{entity}",
+                headers={"Authorization": f"Key {self.token}"},
             )
 
             if not response.ok:
-                msg = f"{namespace}: Entity {entity} not removed: " \
-                      f"{response.status_code} {response.reason}"
+                msg = (
+                    f"{namespace}: Entity {entity} not removed: "
+                    f"{response.status_code} {response.reason}"
+                )
 
                 try:
                     msg = f"{msg}: {response.json()['message']}"
@@ -485,9 +451,7 @@ class Sensu:
 
             else:
                 try:
-                    self._delete_silenced_entry(
-                        entity=entity, namespace=namespace
-                    )
+                    self._delete_silenced_entry(entity=entity, namespace=namespace)
 
                 except SCGWarnException as e:
                     self.logger.warning(f"{namespace}: {str(e)}")
@@ -510,26 +474,21 @@ class Sensu:
         if "subscriptions" not in entity2:
             entity2.update({"subscriptions": None})
 
-        if entity1["metadata"]["name"] == entity2["metadata"]["name"] and \
-                entity1["metadata"]["namespace"] == \
-                entity2["metadata"]["namespace"] and \
-                entity1["metadata"]["labels"] == \
-                entity2["metadata"]["labels"] and \
-                entity1["subscriptions"] == \
-                entity2["subscriptions"]:
+        if (
+            entity1["metadata"]["name"] == entity2["metadata"]["name"]
+            and entity1["metadata"]["namespace"] == entity2["metadata"]["namespace"]
+            and entity1["metadata"]["labels"] == entity2["metadata"]["labels"]
+            and entity1["subscriptions"] == entity2["subscriptions"]
+        ):
             equal = True
 
         return equal
 
     def _put_check(self, check, namespace):
         response = requests.put(
-            f"{self.url}/api/core/v2/namespaces/{namespace}/checks/"
-            f"{check['metadata']['name']}",
-            headers={
-                "Authorization": f"Key {self.token}",
-                "Content-Type": "application/json"
-            },
-            data=json.dumps(check)
+            f"{self.url}/api/core/v2/namespaces/{namespace}/checks/{check['metadata']['name']}",
+            headers={"Authorization": f"Key {self.token}", "Content-Type": "application/json"},
+            data=json.dumps(check),
         )
 
         return response
@@ -538,9 +497,11 @@ class Sensu:
         response = self._put_check(check=check, namespace=namespace)
 
         if not response.ok:
-            msg = f"{namespace}: " \
-                  f"Check {check['metadata']['name']} not created: " \
-                  f"{response.status_code} {response.reason}"
+            msg = (
+                f"{namespace}: "
+                f"Check {check['metadata']['name']} not created: "
+                f"{response.status_code} {response.reason}"
+            )
             try:
                 msg = f"{msg}: {response.json()['message']}"
 
@@ -554,8 +515,7 @@ class Sensu:
 
         for check in checks:
             existing_check = [
-                ec for ec in existing_checks if
-                ec["metadata"]["name"] == check["metadata"]["name"]
+                ec for ec in existing_checks if ec["metadata"]["name"] == check["metadata"]["name"]
             ]
 
             if len(existing_check) == 0:
@@ -564,14 +524,15 @@ class Sensu:
             else:
                 word = "updated"
 
-            if len(existing_check) == 0 or \
-                    not self._compare_checks(check, existing_check[0]):
+            if len(existing_check) == 0 or not self._compare_checks(check, existing_check[0]):
                 response = self._put_check(check=check, namespace=namespace)
 
                 if not response.ok:
-                    msg = f"{namespace}: " \
-                          f"Check {check['metadata']['name']} not {word}: " \
-                          f"{response.status_code} {response.reason}"
+                    msg = (
+                        f"{namespace}: "
+                        f"Check {check['metadata']['name']} not {word}: "
+                        f"{response.status_code} {response.reason}"
+                    )
                     try:
                         msg = f"{msg}: {response.json()['message']}"
 
@@ -581,29 +542,26 @@ class Sensu:
                     self.logger.warning(msg)
 
                 else:
-                    self.logger.info(
-                        f"{namespace}: Check {check['metadata']['name']} {word}"
-                    )
+                    self.logger.info(f"{namespace}: Check {check['metadata']['name']} {word}")
 
         updated_existing_checks = self._get_checks(namespace=namespace)
-        checks_tobedeleted = sorted(list(set(
-            [check["metadata"]["name"] for check in updated_existing_checks]
-        ).difference(set(
-            [check["metadata"]["name"] for check in checks]
-        ))))
+        checks_tobedeleted = sorted(
+            list(
+                set([check["metadata"]["name"] for check in updated_existing_checks]).difference(
+                    set([check["metadata"]["name"] for check in checks])
+                )
+            )
+        )
 
         checks_tobedeleted = [
-            item for item in checks_tobedeleted if
-            item not in self.non_poem_checks
+            item for item in checks_tobedeleted if item not in self.non_poem_checks
         ]
 
         if len(checks_tobedeleted) > 0:
             self._delete_checks(checks=checks_tobedeleted, namespace=namespace)
 
             after_delete_checks = [
-                check["metadata"]["name"] for check in self._get_checks(
-                    namespace=namespace
-                )
+                check["metadata"]["name"] for check in self._get_checks(namespace=namespace)
             ]
             try:
                 existing_events = self._fetch_events(namespace=namespace)
@@ -620,9 +578,7 @@ class Sensu:
                             entity_checks.append(check)
                             events_tobedeleted.update({entity: entity_checks})
 
-                self._delete_events(
-                    events=events_tobedeleted, namespace=namespace
-                )
+                self._delete_events(events=events_tobedeleted, namespace=namespace)
 
             except SensuException:
                 pass
@@ -631,8 +587,9 @@ class Sensu:
         existing_entities = self._get_proxy_entities(namespace=namespace)
         for entity in entities:
             existing_entity = [
-                ent for ent in existing_entities if
-                ent["metadata"]["name"] == entity["metadata"]["name"]
+                ent
+                for ent in existing_entities
+                if ent["metadata"]["name"] == entity["metadata"]["name"]
             ]
 
             if len(existing_entity) == 0:
@@ -641,22 +598,23 @@ class Sensu:
             else:
                 word = "updated"
 
-            if len(existing_entity) == 0 or \
-                    not self._compare_entities(entity, existing_entity[0]):
+            if len(existing_entity) == 0 or not self._compare_entities(entity, existing_entity[0]):
                 response = requests.put(
                     f"{self.url}/api/core/v2/namespaces/{namespace}/entities/"
                     f"{entity['metadata']['name']}",
                     data=json.dumps(entity),
                     headers={
                         "Authorization": f"Key {self.token}",
-                        "Content-Type": "application/json"
-                    }
+                        "Content-Type": "application/json",
+                    },
                 )
 
                 if not response.ok:
-                    msg = f"{namespace}: Proxy entity " \
-                          f"{entity['metadata']['name']} not {word}: " \
-                          f"{response.status_code} {response.reason}"
+                    msg = (
+                        f"{namespace}: Proxy entity "
+                        f"{entity['metadata']['name']} not {word}: "
+                        f"{response.status_code} {response.reason}"
+                    )
 
                     try:
                         msg = f"{msg}: {response.json()['message']}"
@@ -667,28 +625,23 @@ class Sensu:
                     self.logger.warning(msg)
 
                 else:
-                    self.logger.info(
-                        f"{namespace}: Entity {entity['metadata']['name']} "
-                        f"{word}"
-                    )
+                    self.logger.info(f"{namespace}: Entity {entity['metadata']['name']} {word}")
 
-        entities_tobedeleted = list(set(
-            [entity["metadata"]["name"] for entity in existing_entities]
-        ).difference(set(
-            [entity["metadata"]["name"] for entity in entities]
-        )))
+        entities_tobedeleted = list(
+            set([entity["metadata"]["name"] for entity in existing_entities]).difference(
+                set([entity["metadata"]["name"] for entity in entities])
+            )
+        )
 
         if len(entities_tobedeleted):
-            self._delete_entities(
-                entities=entities_tobedeleted, namespace=namespace
-            )
+            self._delete_entities(entities=entities_tobedeleted, namespace=namespace)
 
     def handle_agents(
-            self,
-            metric_parameters_overrides=None,
-            host_attributes_overrides=None,
-            services="internals",
-            namespace="default"
+        self,
+        metric_parameters_overrides=None,
+        host_attributes_overrides=None,
+        services="internals",
+        namespace="default",
     ):
         if metric_parameters_overrides is None:
             metric_parameters_overrides = []
@@ -701,20 +654,19 @@ class Sensu:
 
             for item in metric_parameters_overrides:
                 if item["hostname"] == hostname:
-                    host_labels.update({
-                        item["label"]: item["value"],
-                    })
+                    host_labels.update(
+                        {
+                            item["label"]: item["value"],
+                        }
+                    )
 
             for item in host_attributes_overrides:
                 if item["hostname"] == hostname:
                     attr_val = create_attribute_env(item["value"])
-                    if is_attribute_secret(item["attribute"]) and not \
-                            attr_val.startswith("$"):
+                    if is_attribute_secret(item["attribute"]) and not attr_val.startswith("$"):
                         attr_val = f"${attr_val}"
 
-                    host_labels.update({
-                        create_label(item["attribute"]): attr_val
-                    })
+                    host_labels.update({create_label(item["attribute"]): attr_val})
 
             return host_labels
 
@@ -730,14 +682,9 @@ class Sensu:
 
                 labels = _get_labels(agent["metadata"]["name"])
                 if (
-                        "labels" in agent["metadata"] and
-                        labels != agent["metadata"]["labels"]
+                    "labels" in agent["metadata"] and labels != agent["metadata"]["labels"]
                 ) or "labels" not in agent["metadata"]:
-                    send_data.update({
-                        "metadata": {
-                            "labels": labels
-                        }
-                    })
+                    send_data.update({"metadata": {"labels": labels}})
 
                 if send_data:
                     response = requests.patch(
@@ -746,14 +693,16 @@ class Sensu:
                         data=json.dumps(send_data),
                         headers={
                             "Authorization": f"Key {self.token}",
-                            "Content-Type": "application/merge-patch+json"
-                        }
+                            "Content-Type": "application/merge-patch+json",
+                        },
                     )
 
                     if not response.ok:
-                        msg = f"{namespace}: {agent['metadata']['name']} " \
-                              f"not updated: " \
-                              f"{response.status_code} {response.reason}"
+                        msg = (
+                            f"{namespace}: {agent['metadata']['name']} "
+                            f"not updated: "
+                            f"{response.status_code} {response.reason}"
+                        )
                         try:
                             msg = f"{msg}: {response.json()['message']}"
 
@@ -765,14 +714,12 @@ class Sensu:
                     else:
                         if "subscriptions" in send_data:
                             self.logger.info(
-                                f"{namespace}: {agent['metadata']['name']} "
-                                f"subscriptions updated"
+                                f"{namespace}: {agent['metadata']['name']} subscriptions updated"
                             )
 
                         if "metadata" in send_data:
                             self.logger.info(
-                                f"{namespace}: {agent['metadata']['name']} "
-                                f"labels updated"
+                                f"{namespace}: {agent['metadata']['name']} labels updated"
                             )
 
         except SensuException:
@@ -781,15 +728,11 @@ class Sensu:
     def _get_handlers(self, namespace):
         response = requests.get(
             f"{self.url}/api/core/v2/namespaces/{namespace}/handlers",
-            headers={
-                "Authorization": f"Key {self.token}",
-                "Content-Type": "application/json"
-            }
+            headers={"Authorization": f"Key {self.token}", "Content-Type": "application/json"},
         )
 
         if not response.ok:
-            msg = f"{namespace}: Handlers fetch error: " \
-                  f"{response.status_code} {response.reason}"
+            msg = f"{namespace}: Handlers fetch error: {response.status_code} {response.reason}"
 
             try:
                 msg = f"{msg}: {response.json()['message']}"
@@ -805,7 +748,8 @@ class Sensu:
 
     def _handle_handler(self, name, data, namespace="default"):
         existing_handler = [
-            handler for handler in self._get_handlers(namespace=namespace)
+            handler
+            for handler in self._get_handlers(namespace=namespace)
             if handler["metadata"]["name"] == name
         ]
 
@@ -813,16 +757,15 @@ class Sensu:
         if len(existing_handler) == 0:
             response = requests.post(
                 f"{self.url}/api/core/v2/namespaces/{namespace}/handlers",
-                headers={
-                    "Authorization": f"Key {self.token}",
-                    "Content-Type": "application/json"
-                },
-                data=json.dumps(data)
+                headers={"Authorization": f"Key {self.token}", "Content-Type": "application/json"},
+                data=json.dumps(data),
             )
 
             if not response.ok:
-                msg = f"{namespace}: {print_name} create error: " \
-                      f"{response.status_code} {response.reason}"
+                msg = (
+                    f"{namespace}: {print_name} create error: "
+                    f"{response.status_code} {response.reason}"
+                )
 
                 try:
                     msg = f"{msg}: {response.json()['message']}"
@@ -839,18 +782,19 @@ class Sensu:
         else:
             if existing_handler[0]["command"] != data["command"]:
                 response = requests.patch(
-                    f"{self.url}/api/core/v2/namespaces/{namespace}/handlers/"
-                    f"{name}",
+                    f"{self.url}/api/core/v2/namespaces/{namespace}/handlers/{name}",
                     headers={
                         "Authorization": f"Key {self.token}",
-                        "Content-Type": "application/merge-patch+json"
+                        "Content-Type": "application/merge-patch+json",
                     },
-                    data=json.dumps({"command": data["command"]})
+                    data=json.dumps({"command": data["command"]}),
                 )
 
                 if not response.ok:
-                    msg = f"{namespace}: {print_name} not updated: " \
-                          f"{response.status_code} {response.reason}"
+                    msg = (
+                        f"{namespace}: {print_name} not updated: "
+                        f"{response.status_code} {response.reason}"
+                    )
 
                     try:
                         msg = f"{msg}: {response.json()['message']}"
@@ -867,44 +811,35 @@ class Sensu:
         self._handle_handler(
             name="publisher-handler",
             data={
-                "metadata": {
-                    "name": "publisher-handler",
-                    "namespace": namespace
-                },
+                "metadata": {"name": "publisher-handler", "namespace": namespace},
                 "type": "pipe",
-                "command": "/bin/sensu2publisher.py"
+                "command": "/bin/sensu2publisher.py",
             },
-            namespace=namespace
+            namespace=namespace,
         )
 
     def handle_slack_handler(self, secrets_file, namespace="default"):
         self._handle_handler(
             name="slack",
             data={
-                "metadata": {
-                    "name": "slack",
-                    "namespace": namespace
-                },
+                "metadata": {"name": "slack", "namespace": namespace},
                 "type": "pipe",
                 "command": f"source {secrets_file} ; "
-                           f"export $(cut -d= -f1 {secrets_file}) ; "
-                           f"sensu-slack-handler --channel '#monitoring'",
-                "runtime_assets": ["sensu-slack-handler"]
+                f"export $(cut -d= -f1 {secrets_file}) ; "
+                f"sensu-slack-handler --channel '#monitoring'",
+                "runtime_assets": ["sensu-slack-handler"],
             },
-            namespace=namespace
+            namespace=namespace,
         )
 
     def _get_filters(self, namespace):
         response = requests.get(
             f"{self.url}/api/core/v2/namespaces/{namespace}/filters",
-            headers={
-                "Authorization": f"Key {self.token}"
-            }
+            headers={"Authorization": f"Key {self.token}"},
         )
 
         if not response.ok:
-            msg = f"{namespace}: Filters fetch error: " \
-                  f"{response.status_code} {response.reason}"
+            msg = f"{namespace}: Filters fetch error: {response.status_code} {response.reason}"
 
             try:
                 msg = f"{msg}: {response.json()['message']}"
@@ -928,33 +863,26 @@ class Sensu:
             added = True
             response = requests.post(
                 f"{self.url}/api/core/v2/namespaces/{namespace}/filters",
-                headers={
-                    "Authorization": f"Key {self.token}",
-                    "Content-Type": "application/json"
-                },
-                data=json.dumps({
-                    "metadata": {
-                        "name": name,
-                        "namespace": namespace
-                    },
-                    "action": "allow",
-                    "expressions": expressions
-                })
+                headers={"Authorization": f"Key {self.token}", "Content-Type": "application/json"},
+                data=json.dumps(
+                    {
+                        "metadata": {"name": name, "namespace": namespace},
+                        "action": "allow",
+                        "expressions": expressions,
+                    }
+                ),
             )
 
         else:
-            the_filter = [
-                f for f in filters if f["metadata"]["name"] == name
-            ][0]
+            the_filter = [f for f in filters if f["metadata"]["name"] == name][0]
             if the_filter["expressions"] != expressions:
                 response = requests.patch(
-                    f"{self.url}/api/core/v2/namespaces/{namespace}/"
-                    f"filters/{name}",
+                    f"{self.url}/api/core/v2/namespaces/{namespace}/filters/{name}",
                     headers={
                         "Authorization": f"Key {self.token}",
-                        "Content-Type": "application/merge-patch+json"
+                        "Content-Type": "application/merge-patch+json",
                     },
-                    data=json.dumps({"expressions": expressions})
+                    data=json.dumps({"expressions": expressions}),
                 )
 
         if response:
@@ -965,8 +893,7 @@ class Sensu:
                 else:
                     intra_msg = f"{name} filter not updated"
 
-                msg = f"{namespace}: {intra_msg}: " \
-                      f"{response.status_code} {response.reason}"
+                msg = f"{namespace}: {intra_msg}: {response.status_code} {response.reason}"
 
                 try:
                     msg = f"{msg}: {response.json()['message']}"
@@ -987,9 +914,7 @@ class Sensu:
 
                 else:
                     operation = "updated"
-                self.logger.info(
-                    f"{namespace}: {name} filter {operation}"
-                )
+                self.logger.info(f"{namespace}: {name} filter {operation}")
 
     def add_daily_filter(self, namespace="default"):
         expressions = [
@@ -1002,9 +927,7 @@ class Sensu:
             "event.check.occurrences % (86400 / event.check.interval) == 0"
         ]
 
-        self._add_filter(
-            name="daily", expressions=expressions, namespace=namespace
-        )
+        self._add_filter(name="daily", expressions=expressions, namespace=namespace)
 
     def add_hard_state_filter(self, namespace="default"):
         expressions = [
@@ -1013,21 +936,16 @@ class Sensu:
             "&& event.check.status != 0))"
         ]
 
-        self._add_filter(
-            name="hard-state", expressions=expressions, namespace=namespace
-        )
+        self._add_filter(name="hard-state", expressions=expressions, namespace=namespace)
 
     def _get_pipelines(self, namespace):
         response = requests.get(
             f"{self.url}/api/core/v2/namespaces/{namespace}/pipelines",
-            headers={
-                "Authorization": f"Key {self.token}"
-            }
+            headers={"Authorization": f"Key {self.token}"},
         )
 
         if not response.ok:
-            msg = f"{namespace}: Pipelines fetch error: " \
-                  f"{response.status_code} {response.reason}"
+            msg = f"{namespace}: Pipelines fetch error: {response.status_code} {response.reason}"
 
             try:
                 msg = f"{msg}: {response.json()['message']}"
@@ -1051,32 +969,22 @@ class Sensu:
             added = True
             response = requests.post(
                 f"{self.url}/api/core/v2/namespaces/{namespace}/pipelines",
-                headers={
-                    "Authorization": f"Key {self.token}",
-                    "Content-Type": "application/json"
-                },
-                data=json.dumps({
-                    "metadata": {
-                        "name": name,
-                        "namespace": namespace
-                    },
-                    "workflows": workflows
-                })
+                headers={"Authorization": f"Key {self.token}", "Content-Type": "application/json"},
+                data=json.dumps(
+                    {"metadata": {"name": name, "namespace": namespace}, "workflows": workflows}
+                ),
             )
 
         else:
-            the_pipeline = [
-                p for p in pipelines if p["metadata"]["name"] == name
-            ][0]
+            the_pipeline = [p for p in pipelines if p["metadata"]["name"] == name][0]
             if the_pipeline["workflows"] != workflows:
                 response = requests.patch(
-                    f"{self.url}/api/core/v2/namespaces/{namespace}/pipelines/"
-                    f"{name}",
+                    f"{self.url}/api/core/v2/namespaces/{namespace}/pipelines/{name}",
                     headers={
                         "Authorization": f"Key {self.token}",
-                        "Content-Type": "application/merge-patch+json"
+                        "Content-Type": "application/merge-patch+json",
                     },
-                    data=json.dumps({"workflows": workflows})
+                    data=json.dumps({"workflows": workflows}),
                 )
 
         if response:
@@ -1086,8 +994,7 @@ class Sensu:
                 else:
                     intra_msg = f"{name} pipeline not updated"
 
-                msg = f"{namespace}: {intra_msg}: " \
-                      f"{response.status_code} {response.reason}"
+                msg = f"{namespace}: {intra_msg}: {response.status_code} {response.reason}"
 
                 try:
                     msg = f"{msg}: {response.json()['message']}"
@@ -1115,94 +1022,52 @@ class Sensu:
             {
                 "name": "slack_alerts",
                 "filters": [
-                    {
-                        "name": "is_incident",
-                        "type": "EventFilter",
-                        "api_version": "core/v2"
-                    },
-                    {
-                        "name": "not_silenced",
-                        "type": "EventFilter",
-                        "api_version": "core/v2"
-                    },
-                    {
-                        "name": "daily",
-                        "type": "EventFilter",
-                        "api_version": "core/v2"
-                    }
+                    {"name": "is_incident", "type": "EventFilter", "api_version": "core/v2"},
+                    {"name": "not_silenced", "type": "EventFilter", "api_version": "core/v2"},
+                    {"name": "daily", "type": "EventFilter", "api_version": "core/v2"},
                 ],
-                "handler": {
-                    "name": "slack",
-                    "type": "Handler",
-                    "api_version": "core/v2"
-                }
+                "handler": {"name": "slack", "type": "Handler", "api_version": "core/v2"},
             }
         ]
 
-        self._add_pipeline(
-            name="reduce_alerts", workflows=workflows, namespace=namespace
-        )
+        self._add_pipeline(name="reduce_alerts", workflows=workflows, namespace=namespace)
 
     def add_hard_state_pipeline(self, namespace="default"):
         workflows = [
             {
                 "name": "mimic_hard_state",
                 "filters": [
-                    {
-                        "name": "hard-state",
-                        "type": "EventFilter",
-                        "api_version": "core/v2"
-                    }
+                    {"name": "hard-state", "type": "EventFilter", "api_version": "core/v2"}
                 ],
                 "handler": {
                     "name": "publisher-handler",
                     "type": "Handler",
-                    "api_version": "core/v2"
-                }
+                    "api_version": "core/v2",
+                },
             }
         ]
 
-        self._add_pipeline(
-            name="hard_state", workflows=workflows, namespace=namespace
-        )
+        self._add_pipeline(name="hard_state", workflows=workflows, namespace=namespace)
 
     def _add_asset_check(self, name, namespace):
         checks = self._get_checks(namespace=namespace)
         checks_names = [check["metadata"]["name"] for check in checks]
         agents = [
-            f"entity:{item['metadata']['name']}" for item in
-            self.get_agents(namespace=namespace)
+            f"entity:{item['metadata']['name']}" for item in self.get_agents(namespace=namespace)
         ]
 
-        assets = {
-            "sensu.cpu.usage": "check-cpu-usage",
-            "sensu.memory.usage": "check-memory-usage"
-        }
+        assets = {"sensu.cpu.usage": "check-cpu-usage", "sensu.memory.usage": "check-memory-usage"}
 
         data = {
             "command": f"{assets[name]} -w 85 -c 90",
             "interval": 300,
             "publish": True,
-            "runtime_assets": [
-                assets[name]
-            ],
+            "runtime_assets": [assets[name]],
             "subscriptions": agents,
             "timeout": 900,
             "round_robin": False,
-            "metadata": {
-                "name": name,
-                "namespace": namespace,
-                "annotations": {
-                    "attempts": "3"
-                }
-            },
-            "pipelines": [
-                {
-                    "name": "reduce_alerts",
-                    "type": "Pipeline",
-                    "api_version": "core/v2"
-                }
-            ]
+            "metadata": {"name": name, "namespace": namespace, "annotations": {"attempts": "3"}},
+            "pipelines": [{"name": "reduce_alerts", "type": "Pipeline", "api_version": "core/v2"}],
         }
 
         response = None
@@ -1212,33 +1077,28 @@ class Sensu:
             response = requests.post(
                 f"{self.url}/api/core/v2/namespaces/{namespace}/checks",
                 data=json.dumps(data),
-                headers={
-                    "Authorization": f"Key {self.token}",
-                    "Content-Type": "application/json"
-                }
+                headers={"Authorization": f"Key {self.token}", "Content-Type": "application/json"},
             )
 
         else:
-            check = [
-                check for check in checks if check["metadata"]["name"] == name
-            ][0]
-            if check["command"] != data["command"] or \
-                    check["interval"] != data["interval"] \
-                    or check["runtime_assets"] != data["runtime_assets"] \
-                    or check["subscriptions"] != data["subscriptions"] \
-                    or check["timeout"] != data["timeout"] \
-                    or check["pipelines"] != data["pipelines"] \
-                    or "annotations" not in check["metadata"] \
-                    or check["metadata"]["annotations"] != \
-                    data["metadata"]["annotations"]:
+            check = [check for check in checks if check["metadata"]["name"] == name][0]
+            if (
+                check["command"] != data["command"]
+                or check["interval"] != data["interval"]
+                or check["runtime_assets"] != data["runtime_assets"]
+                or check["subscriptions"] != data["subscriptions"]
+                or check["timeout"] != data["timeout"]
+                or check["pipelines"] != data["pipelines"]
+                or "annotations" not in check["metadata"]
+                or check["metadata"]["annotations"] != data["metadata"]["annotations"]
+            ):
                 response = requests.put(
-                    f"{self.url}/api/core/v2/namespaces/{namespace}/checks/"
-                    f"{name}",
+                    f"{self.url}/api/core/v2/namespaces/{namespace}/checks/{name}",
                     data=json.dumps(data),
                     headers={
                         "Authorization": f"Key {self.token}",
-                        "Content-Type": "application/json"
-                    }
+                        "Content-Type": "application/json",
+                    },
                 )
 
         if response:
@@ -1251,8 +1111,10 @@ class Sensu:
                 self.logger.info(f"{namespace}: Check {name} {operation}")
 
             else:
-                msg = f"{namespace}: Check {name} not {operation}: " \
-                      f"{response.status_code} {response.reason}"
+                msg = (
+                    f"{namespace}: Check {name} not {operation}: "
+                    f"{response.status_code} {response.reason}"
+                )
 
                 try:
                     msg = f"{msg}: {response.json()['message']}"
@@ -1264,7 +1126,7 @@ class Sensu:
                 raise SensuException(msg)
 
     def add_cpu_check(self, namespace="default"):
-        self._add_asset_check(name="sensu.cpu.usage",  namespace=namespace)
+        self._add_asset_check(name="sensu.cpu.usage", namespace=namespace)
 
     def add_memory_check(self, namespace="default"):
         self._add_asset_check(name="sensu.memory.usage", namespace=namespace)
@@ -1272,8 +1134,7 @@ class Sensu:
     def _get_check(self, check, namespace):
         try:
             return [
-                c for c in self._get_checks(namespace=namespace)
-                if c["metadata"]["name"] == check
+                c for c in self._get_checks(namespace=namespace) if c["metadata"]["name"] == check
             ][0]
 
         except IndexError:
@@ -1284,24 +1145,29 @@ class Sensu:
 
         try:
             entity_configuration = [
-                e for e in self._get_entities(namespace=namespace) if
-                e["metadata"]["name"] == entity
+                e
+                for e in self._get_entities(namespace=namespace)
+                if e["metadata"]["name"] == entity
             ][0]
 
         except IndexError:
             raise SensuException(f"No entity {entity} in namespace {namespace}")
 
-        is_check_run = \
-            entity_configuration["entity_class"] == "agent" and \
-            len(set(check_configuration["subscriptions"]).intersection(
-                set(entity_configuration["subscriptions"])
-            )) > 0 and "proxy_requests" not in check_configuration or \
-            create_label(check) in entity_configuration["metadata"]["labels"]
+        is_check_run = (
+            entity_configuration["entity_class"] == "agent"
+            and len(
+                set(check_configuration["subscriptions"]).intersection(
+                    set(entity_configuration["subscriptions"])
+                )
+            )
+            > 0
+            and "proxy_requests" not in check_configuration
+            or create_label(check) in entity_configuration["metadata"]["labels"]
+        )
 
         if not is_check_run:
             raise SensuException(
-                f"No event with entity {entity} and check {check} in "
-                f"namespace {namespace}"
+                f"No event with entity {entity} and check {check} in namespace {namespace}"
             )
 
         list_command = []
@@ -1326,8 +1192,7 @@ class Sensu:
             if element.startswith(".labels"):
                 key = element[8:]
                 if "|" in key:
-                    def_val = key.split("|")[1].split("default")[1].strip()\
-                        .replace("\"", "")
+                    def_val = key.split("|")[1].split("default")[1].strip().replace('"', "")
                     key = key.split("|")[0].strip()
                     try:
                         value = entity_configuration["metadata"]["labels"][key]
@@ -1352,41 +1217,34 @@ class Sensu:
         return output_command, timeout
 
     def get_check_subscriptions(self, check, namespace="default"):
-        return self._get_check(check=check, namespace=namespace)[
-            "subscriptions"
-        ]
+        return self._get_check(check=check, namespace=namespace)["subscriptions"]
 
     def create_silencing_entry(self, check, entity, namespace="default"):
         try:
             self._get_event(entity=entity, check=check, namespace=namespace)
 
         except SensuException as err:
-            raise SensuException(
-                f"{str(err).lstrip('Sensu error: ')}: "
-                f"Silencing entry not created"
-            )
+            raise SensuException(f"{str(err).lstrip('Sensu error: ')}: Silencing entry not created")
 
         else:
             response = requests.post(
                 f"{self.url}/api/core/v2/namespaces/{namespace}/silenced",
-                data=json.dumps({
-                    "metadata": {
-                        "name": f"entity:{entity}:{check}",
-                        "namespace": namespace
-                    },
-                    "expire_on_resolve": True,
-                    "check": check,
-                    "subscription": f"entity:{entity}"
-                }),
-                headers={
-                    "Authorization": f"Key {self.token}",
-                    "Content-Type": "application/json"
-                }
+                data=json.dumps(
+                    {
+                        "metadata": {"name": f"entity:{entity}:{check}", "namespace": namespace},
+                        "expire_on_resolve": True,
+                        "check": check,
+                        "subscription": f"entity:{entity}",
+                    }
+                ),
+                headers={"Authorization": f"Key {self.token}", "Content-Type": "application/json"},
             )
 
             if not response.ok:
-                msg = f"{namespace}: Silencing entry {entity}/{check} create " \
-                      f"error: {response.status_code} {response.reason}"
+                msg = (
+                    f"{namespace}: Silencing entry {entity}/{check} create "
+                    f"error: {response.status_code} {response.reason}"
+                )
 
                 try:
                     msg = f"{msg}: {response.json()['message']}"
@@ -1399,14 +1257,14 @@ class Sensu:
     def _get_silenced_entries(self, namespace="default"):
         response = requests.get(
             f"{self.url}/api/core/v2/namespaces/{namespace}/silenced",
-            headers={
-                "Authorization": f"Key {self.token}"
-            }
+            headers={"Authorization": f"Key {self.token}"},
         )
 
         if not response.ok:
-            msg = f"{namespace}: Silenced entries fetch error: " \
-                  f"{response.status_code} {response.reason}"
+            msg = (
+                f"{namespace}: Silenced entries fetch error: "
+                f"{response.status_code} {response.reason}"
+            )
 
             try:
                 msg = f"{msg}: {response.json()['message']}"
@@ -1419,21 +1277,19 @@ class Sensu:
         else:
             return response.json()
 
-    def _delete_silenced_entry(
-            self, entity=None, check=None, namespace="default"
-    ):
+    def _delete_silenced_entry(self, entity=None, check=None, namespace="default"):
         silenced_entries = self._get_silenced_entries(namespace=namespace)
 
         if entity:
             silenced_entries = [
-                item for item in silenced_entries if
-                item["metadata"]["name"].startswith(f"entity:{entity}:")
+                item
+                for item in silenced_entries
+                if item["metadata"]["name"].startswith(f"entity:{entity}:")
             ]
 
         if check:
             silenced_entries = [
-                item for item in silenced_entries
-                if item["metadata"]["name"].endswith(f":{check}")
+                item for item in silenced_entries if item["metadata"]["name"].endswith(f":{check}")
             ]
 
         failed_delete = list()
@@ -1441,7 +1297,7 @@ class Sensu:
             response = requests.delete(
                 f"{self.url}/api/core/v2/namespaces/{namespace}"
                 f"/silenced/{entry['metadata']['name']}",
-                headers={"Authorization": f"Key {self.token}"}
+                headers={"Authorization": f"Key {self.token}"},
             )
 
             if not response.ok:
@@ -1463,9 +1319,7 @@ class Sensu:
             else:
                 word = "entries"
 
-            final_msg = (
-                f"{final_msg} {word} {', '.join(failed_delete)} not removed"
-            )
+            final_msg = f"{final_msg} {word} {', '.join(failed_delete)} not removed"
 
             raise SCGWarnException(final_msg)
 
@@ -1479,7 +1333,7 @@ class MetricOutput:
 
     def get_hostname(self):
         return self.data["entity"]["metadata"]["name"][
-            len(self.data["entity"]["metadata"]["labels"]["service"]) + 2:
+            len(self.data["entity"]["metadata"]["labels"]["service"]) + 2 :
         ]
 
     def get_metric_name(self):
@@ -1554,14 +1408,18 @@ class MetricOutput:
         return self.data["entity"]["metadata"]["labels"]["ngi"]
 
     def get_tenants(self):
-        check_tenants = set([
-            item.strip() for item in
-            self.data["check"]["metadata"]["labels"]["tenants"].split(",")
-        ])
-        entity_tenants = set([
-            item.strip() for item in
-            self.data["entity"]["metadata"]["labels"]["tenants"].split(",")
-        ])
+        check_tenants = set(
+            [
+                item.strip()
+                for item in self.data["check"]["metadata"]["labels"]["tenants"].split(",")
+            ]
+        )
+        entity_tenants = set(
+            [
+                item.strip()
+                for item in self.data["entity"]["metadata"]["labels"]["tenants"].split(",")
+            ]
+        )
 
         return sorted(list(entity_tenants.intersection(check_tenants)))
 
@@ -1572,10 +1430,9 @@ class SensuCtl:
         self.tenant = tenant
 
     def _get_events(self):
-        output = subprocess.check_output([
-            "sensuctl", "event", "list", "--format", "json", "--namespace",
-            self.namespace
-        ]).decode("utf-8")
+        output = subprocess.check_output(
+            ["sensuctl", "event", "list", "--format", "json", "--namespace", self.namespace]
+        ).decode("utf-8")
         data = json.loads(output)
 
         return data
@@ -1583,14 +1440,10 @@ class SensuCtl:
     @staticmethod
     def _format_events(data):
         output_list = list()
-        entities = [
-            item["entity"]["metadata"]["name"] for item in data
-        ]
+        entities = [item["entity"]["metadata"]["name"] for item in data]
         if len(entities) > 0:
             entities_len = len(max(entities, key=len)) + 2
-            metrics = [
-                item["check"]["metadata"]["name"] for item in data
-            ]
+            metrics = [item["check"]["metadata"]["name"] for item in data]
             metric_len = len(max(metrics, key=len)) + 2
 
         else:
@@ -1619,10 +1472,9 @@ class SensuCtl:
             else:
                 status = "UNKNOWN"
 
-            executed = datetime.datetime.fromtimestamp(item["timestamp"])
+            executed = datetime.datetime.fromtimestamp(item["timestamp"], tz=datetime.timezone.utc)
             metric_output = item["check"]["output"].split("|")[0].strip()
-            single_line_output = (
-                metric_output.split("\n")[0].split("\\n")[0].strip())
+            single_line_output = metric_output.split("\n")[0].split("\\n")[0].strip()
 
             output_list.append(
                 f"{entity.ljust(entities_len)}{metric.ljust(metric_len)}"
@@ -1635,32 +1487,27 @@ class SensuCtl:
     def get_events(self):
         data = self._get_events()
         tenant_data = [
-            item for item in data if
-            item["entity"]["entity_class"] == "agent" or
-            (self.tenant in [
-                t.strip() for t in item["check"]["metadata"]["labels"][
-                    "tenants"
-                ].split(",")
-            ] and self.tenant in [
-                t.strip() for t in item["entity"]["metadata"]["labels"][
-                    "tenants"
-                ].split(",")
-            ])
+            item
+            for item in data
+            if item["entity"]["entity_class"] == "agent"
+            or (
+                self.tenant
+                in [t.strip() for t in item["check"]["metadata"]["labels"]["tenants"].split(",")]
+                and self.tenant
+                in [t.strip() for t in item["entity"]["metadata"]["labels"]["tenants"].split(",")]
+            )
         ]
         return self._format_events(tenant_data)
 
     @staticmethod
     def _is_servicetype(item, servicetype):
         if item["entity"]["entity_class"] == "agent":
-            services = item["entity"]["metadata"]["labels"]["services"].split(
-                ","
-            )
+            services = item["entity"]["metadata"]["labels"]["services"].split(",")
             return servicetype in [service.strip() for service in services]
 
         else:
             try:
-                return (item["entity"]["metadata"]["labels"]["service"] ==
-                        servicetype)
+                return item["entity"]["metadata"]["labels"]["service"] == servicetype
 
             except KeyError:
                 return False
@@ -1669,27 +1516,18 @@ class SensuCtl:
         events = self._get_events()
 
         if agent:
-            events = [
-                item for item in events
-                if item["entity"]["entity_class"] == "agent"
-            ]
+            events = [item for item in events if item["entity"]["entity_class"] == "agent"]
 
         if status is not None:
             if status == 3:
-                events = [
-                    item for item in events if item["check"]["status"] >= 3
-                ]
+                events = [item for item in events if item["check"]["status"] >= 3]
 
             else:
-                events = [
-                    item for item in events if item["check"]["status"] == status
-                ]
+                events = [item for item in events if item["check"]["status"] == status]
 
         if service_type:
             events = [
-                item for item in events if self._is_servicetype(
-                    item=item, servicetype=service_type
-                )
+                item for item in events if self._is_servicetype(item=item, servicetype=service_type)
             ]
 
         return self._format_events(events)
