@@ -1,0 +1,11 @@
+# python caches
+
+tests/__pycache__/*
+modules/__pycache__/*
+argo_scg/__pycache__/*
+
+# vscode config
+.vscode/*
+
+# symlink
+argo_scg

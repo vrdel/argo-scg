@@ -2830,6 +2830,18 @@ mock_topology = [
         }
     },
     {
+        "group": "argo-public-production",
+        "service": "argo.grafana",
+        "hostname": "www.srce.hr",
+        "tags": {
+            "info_URL": "http://www.srce.hr:6789/url_path",
+            "info_ext_PORT": "45554",
+            "info_ext_SSL": "1",
+            "info_ext_PATH": "/path"
+        }
+    },
+
+    {
         "date": "2023-10-03",
         "group": "SRCE",
         "type": "SITES",
@@ -4091,6 +4103,21 @@ mock_metric_profiles = [
             }
         ]
     },
+    {
+        "id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+        "date": "2026-09-22",
+        "name": "ARGO_TEST60",
+        "description": "Profile for testing setting PATH, PORT, SSL \
+                        via info_ext attribs",
+        "services": [
+            {
+                "service": "argo.grafana",
+                "metrics": [
+                    "generic.http.connect"
+                ]
+            }
+        ]
+    }
 ]
 
 mock_local_topology = [
@@ -10993,6 +11020,49 @@ class EntityConfigurationTests(unittest.TestCase):
                     }
                 },
             ]
+        )
+        self.assertEqual(log.output, DUMMY_LOG)
+    
+    def test_generate_entities_with_ext_PORT_PATH_attribs(self) -> None:
+        generator = ConfigurationGenerator(
+            metrics=mock_metrics,
+            profiles=["ARGO_TEST60"],
+            metric_profiles=mock_metric_profiles,
+            topology=mock_topology,
+            attributes=mock_attributes,
+            secrets_file="",
+            default_ports=mock_default_ports,
+            tenant="MOCK_TENANT",
+            default_agent = ["sensu-agent-mock_tenant.example.com"]
+        )
+        with self.assertLogs(LOGNAME) as log:
+            self.maxDiff = None
+            _log_dummy()
+            entities = generator.generate_entities()
+        self.assertEqual(
+            sorted(entities, key=lambda k: k["metadata"]["name"]),
+            [
+                {
+                    "entity_class": "proxy",
+                    "metadata": {
+                        "labels": {
+                            "generic_http_connect": "generic.http.connect",
+                            "generic_http_connect_path": "-u /path",
+                            "generic_http_connect_port": "-p 45554",
+                            "hostname": "www.srce.hr",
+                            "info_url": "https://www.srce.hr:45554/path",
+                            "ngi": "",
+                            "path": "/path",
+                            "port": "45554",
+                            "service": "argo.grafana",
+                            "site": "argo-public-production",
+                            "ssl": "-S --sni",
+                            "tenants": "MOCK_TENANT"
+                        },
+                    "name": "argo.grafana__www.srce.hr",
+                    "namespace": "default"
+               }
+            }]
         )
         self.assertEqual(log.output, DUMMY_LOG)
 

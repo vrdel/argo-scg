@@ -1,6 +1,6 @@
 import logging
 import os
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit, urlunsplit
 
 from argo_scg.exceptions import GeneratorException
 
@@ -550,6 +550,8 @@ class ConfigurationGenerator:
         ]
         special_attributes = ["BDII_DN", "GLUE2_BDII_DN"]
 
+        port_override = False
+        path_override = False
         for key, value in attrs.items():
             if value not in overridden_parameters:
                 if key == "NAGIOS_HOST_CERT":
@@ -646,13 +648,13 @@ class ConfigurationGenerator:
                         key = "{{ .labels.ssl | default \" \" }}"
                         value = ""
 
-                    elif key == "PATH":
+                    elif key == "PATH" and not path_override:
                         key = "{{ .labels.%s_path | default \" \" }}" % (
                             create_label(metric)
                         )
                         value = ""
 
-                    elif key == "PORT":
+                    elif key == "PORT" and not port_override:
                         key = "{{ .labels.%s_port | default \" \" }}" % (
                             create_label(metric)
                         )
@@ -678,7 +680,22 @@ class ConfigurationGenerator:
                                 key.endswith("_URL") and
                                 key not in self.non_fallback_urls
                         ):
-                            key = "{{ .labels.%s }}" % create_label(key.lower())
+                            if (key.endswith("PATH")) and not path_override:
+                                path_override = True
+
+                                key = "{{ .labels.%s_path | default \" \" }}" % (
+                                create_label(metric)
+                                )
+                                value = ""
+                            elif (key.endswith("PORT")):
+                                port_override = True
+
+                                key = "{{ .labels.%s_port | default \" \" }}" % (
+                                create_label(metric)
+                                )
+                                value = ""
+                            else:
+                                key = "{{ .labels.%s }}" % create_label(key.lower())
 
                         else:
                             key = "{{ .labels.%s__%s | default \"\" }}" % (
@@ -996,6 +1013,84 @@ class ConfigurationGenerator:
     def _handle_endpoint_url(url):
         if "&" in url:
             url = f"\"{url}\""
+        
+        return url
+    
+    @staticmethod
+    def _are_any_url_ext_tags_defined(entity):
+        return ("info_ext_SSL" in entity["tags"]
+                or "info_ext_PORT" in entity["tags"]
+                or "info_ext_PATH" in entity["tags"])
+
+    @staticmethod
+    def _get_url(entity, hostname):
+        url = ""
+        if "info_URL" in entity["tags"]:
+            url = entity["tags"]["info_URL"]
+
+            if ConfigurationGenerator._are_any_url_ext_tags_defined(entity):
+                split_url = urlsplit(url)
+
+                if "info_ext_SSL" in entity["tags"]:
+                    try:
+                        use_ssl = int(entity["tags"]["info_ext_SSL"])
+                        new_scheme = "https" if use_ssl else "http"
+                        split_url = split_url._replace(scheme=new_scheme)
+                    except:
+                        logging.warning(
+                            "Unable to convert info_ext_SSL to int. \
+                            Using default value in info_URL.")
+                
+                if "info_ext_PORT" in entity["tags"]:
+                    try:
+                        new_port = entity["tags"]["info_ext_PORT"]
+
+                        netloc = split_url.netloc
+                        if ":" in netloc and not netloc.count(":") > 1:
+                            host = netloc.rsplit(":", 1)[0]
+                        else:
+                            host = netloc
+                        
+                        split_url = split_url._replace(netloc=f"{host}:{new_port}")
+                    except:
+                        logging.warning(
+                            "Unable to parse info_ext_PORT. \
+                            Using default value in info_URL.")
+                    
+                
+                if "info_ext_PATH" in entity["tags"]:
+                    try:
+                        new_path = entity["tags"]["info_ext_PATH"]
+                        if len(new_path) > 0 and new_path[0] == '/':
+                            new_path = new_path[1:]
+                        
+                        split_url = split_url._replace(path=f"/{new_path}")
+                    except:
+                        logging.warning(
+                            "Unable to parse info_ext_PATH. \
+                            Using default value in info_URL.")
+                
+                url = urlunsplit(split_url)
+
+        else:
+            if ConfigurationGenerator._are_any_url_ext_tags_defined(entity):
+                if "info_ext_SSL" in entity["tags"]:
+                    use_ssl = entity["tags"]["info_ext_SSL"]
+                    if use_ssl:
+                        url += "https://"
+                
+                url += hostname
+
+                if "info_ext_PORT" in entity["tags"]:
+                    port = entity["tags"]["info_ext_PORT"]
+                    url += f":{port}"
+                
+                if "info_ext_PATH" in entity["tags"]:
+                    path = entity["tags"]["info_ext_PATH"]
+                    if len(path) > 0 and path[0] == '/':
+                        path = path[1:]
+                    
+                    url += f"/{path}"
 
         return url
 
@@ -1021,7 +1116,10 @@ class ConfigurationGenerator:
 
                 labels = {"hostname": hostname}
 
-                if "info_URL" in item["tags"]:
+                if ("info_URL" in item["tags"]
+                    or self._are_any_url_ext_tags_defined(item)):
+                    url = self._get_url(item, hostname)
+
                     servicetypes_with_path = [
                         st for st in self.servicetypes_with_path if
                         item["service"] == st["service"]
@@ -1030,27 +1128,31 @@ class ConfigurationGenerator:
                         st for st in self.servicetypes_with_port if
                         item["service"] == st["service"]
                     ]
-                    labels.update({
-                        "info_url": self._handle_endpoint_url(
-                            item["tags"]["info_URL"]
-                        )
-                    })
-                    o = urlparse(item["tags"]["info_URL"])
+                    
+                    if "info_URL" in item["tags"]:
+                        labels.update({
+                            "info_url": self._handle_endpoint_url(
+                                url
+                            )
+                        })
+                    
+                    o = urlparse(url)
                     port = o.port
 
-                    if item["service"] in self.servicetypes_with_SSL:
-                        if o.scheme == "https":
+                    if item["service"] in self.servicetypes_with_SSL:                        
+                        if (o.scheme == "https" 
+                            or "info_ext_SSL" in item["tags"]
+                        ):
                             labels.update({"ssl": "-S --sni"})
-
-                    if o.path:
-                        path = o.path
+                    path = o.path
+                    if path:
                         if o.query:
                             path = f"{path}?{o.query}"
                         for entry in servicetypes_with_path:
                             lbl = f"{create_label(entry['metric'])}_path"
                             val = f"{entry['attr_val']} {path}"
                             labels.update({lbl: val})
-
+                    
                     if port:
                         for entry in servicetypes_with_port:
                             lbl = f"{create_label(entry['metric'])}_port"
@@ -1066,7 +1168,7 @@ class ConfigurationGenerator:
                         labels.update({"os_keystone_host": o.hostname})
                         labels.update({
                             "os_keystone_url": self._handle_endpoint_url(
-                                item["tags"]["info_URL"]
+                                url
                             )
                         })
 
@@ -1081,7 +1183,8 @@ class ConfigurationGenerator:
 
                 else:
                     if item["service"] in self.servicetypes_with_endpointURL:
-                        if "info_URL" not in item["tags"]:
+                        if ("info_URL" not in item["tags"]
+                            and not self._are_any_url_ext_tags_defined(item)):
                             metrics_with_endpoint_url = \
                                 self.metrics_with_endpoint_url.keys()
                             url_metrics = list(set(
@@ -1121,7 +1224,7 @@ class ConfigurationGenerator:
                         else:
                             labels.update({
                                 "endpoint_url": self._handle_endpoint_url(
-                                    item["tags"]["info_URL"]
+                                    self._get_url(item, hostname)
                                 )
                             })
 
@@ -1137,11 +1240,12 @@ class ConfigurationGenerator:
                                     )
                             })
 
-                        elif "info_URL" in item["tags"]:
+                        elif ("info_URL" in item["tags"]
+                            or self._are_any_url_ext_tags_defined(item)):
                             labels.update({
                                 create_label(attr):
                                     self._handle_endpoint_url(
-                                        item["tags"]["info_URL"]
+                                        self._get_url(item, hostname)
                                     )
                             })
 
@@ -1374,7 +1478,10 @@ class ConfigurationGenerator:
                             elif (tag[9:] in non_fallback_urls_created and
                                   not present_in_all):
                                 continue
-
+                            
+                            elif tag.lower() == "info_ext_ssl":
+                                continue
+                            
                             elif present_in_all or tag.endswith("_URL"):
                                 if value in ["0", "1"]:
                                     value = ""
